@@ -119,7 +119,9 @@ const char *engine_qat_id = "qat";
 const char *engine_qat_name =
     "Reference implementation of QAT crypto engine";
 
-char *ICPConfigSectionName_libcrypto = "SHIM";
+#define CONFIG_SECTION_NAME_SIZE 64
+char config_section_name[CONFIG_SECTION_NAME_SIZE] = "SHIM";
+char *ICPConfigSectionName_libcrypto = config_section_name;
 
 CpaInstanceHandle *qat_instance_handles = NULL;
 Cpa16U qat_num_instances = 0;
@@ -196,6 +198,20 @@ int qat_use_signals(void)
     return qat_use_signals_no_engine_start();
 }
 
+static int validate_configuration_section_name(const char *name)
+{
+    int len;
+
+    if (!name)
+        return 0;
+
+    len = strlen(name);
+
+    if (len == 0 || len >= CONFIG_SECTION_NAME_SIZE)
+        return 0;
+
+    return 1;
+}
 
 int get_next_inst_num(void)
 {
@@ -538,6 +554,7 @@ int qat_engine_init(ENGINE *e)
 #define QAT_CMD_ENABLE_HEURISTIC_POLLING (ENGINE_CMD_BASE + 13)
 #define QAT_CMD_GET_NUM_REQUESTS_IN_FLIGHT (ENGINE_CMD_BASE + 14)
 #define QAT_CMD_INIT_ENGINE (ENGINE_CMD_BASE + 15)
+#define QAT_CMD_SET_CONFIGURATION_SECTION_NAME (ENGINE_CMD_BASE + 16)
 
 static const ENGINE_CMD_DEFN qat_cmd_defns[] = {
     {
@@ -620,6 +637,11 @@ static const ENGINE_CMD_DEFN qat_cmd_defns[] = {
      "INIT_ENGINE",
      "Initializes the engine if not already initialized",
      ENGINE_CMD_FLAG_NO_INPUT},
+    {
+     QAT_CMD_SET_CONFIGURATION_SECTION_NAME,
+     "SET_CONFIGURATION_SECTION_NAME",
+     "Set the configuration section to use in QAT driver configuration file",
+     ENGINE_CMD_FLAG_STRING},
     {0, NULL, NULL, 0}
 };
 
@@ -819,6 +841,17 @@ qat_engine_ctrl(ENGINE *e, int cmd, long i, void *p, void (*f) (void))
         DEBUG("Init engine\n");
         if ((retVal = qat_engine_init(e)) == 0) {
             WARN("Failure initializing engine\n");
+        }
+        break;
+
+    case QAT_CMD_SET_CONFIGURATION_SECTION_NAME:
+        if (p) {
+            if (validate_configuration_section_name(p)) {
+                strncpy(config_section_name, p, CONFIG_SECTION_NAME_SIZE);
+            }
+        } else {
+            WARN("Invalid p parameter\n");
+            retVal = 0;
         }
         break;
 
